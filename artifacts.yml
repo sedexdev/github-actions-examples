@@ -1,0 +1,75 @@
+---
+name: Tests
+on: push
+permissions: read-all
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Cache dependencies # caching must be done before the install step
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: deps-node-modules-${{ hashFiles('**/package.lock.json') }} # hashing the deps creates unique keys for
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint codebase
+        run: npm run lint
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Cache dependencies # caching step needs to be repeated but the cache is shared
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: deps-node-modules-${{ hashFiles('**/package.lock.json') }}
+      - name: Install dependencies
+        run: npm ci
+      - name: Test project
+        run: npm run test
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      script-file: ${{ steps.publish.outputs.script-file }} # steps.<id>.outputs.<name>
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Cache dependencies # if nothing has changed the existing cache is used
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: deps-node-modules-${{ hashFiles('**/package.lock.json') }}
+      - name: Install dependencies
+        run: npm ci
+      - name: Deploy project
+        run: npm run build
+      - name: Publish JS filename
+        id: publish # id is used to fetch the output for this step
+        run: find dist/assets/*.js -type f -execdir echo 'script-file={}' >> $GITHUB_OUTPUT ';' # script-file={} sets the above output
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4 # uploads artifiacts to GitHub for manual download
+        with:
+          name: dist-files # allows us to use artifacts in another job
+          path: | # pipe symbol for multi-line instructions
+            dist
+            package.json
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-files # name must match the name when uploading
+      - name: Output directory contents
+        run: ls -la
+      - name: Output build job JS filename
+        run: echo "${{ needs.build.outputs.script-file }}" # use a simple value from the build job
+      - name: Confirm deployment
+        run: echo "Deployment successful :)"

@@ -1,0 +1,85 @@
+---
+name: Deployment Workflow
+on: push
+permissions: read-all
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Load & Cache Dependencies
+        id: cache-deps
+        uses: ./.github/actions/cache-deps # just add folder containing action.yml
+        with:
+          caching: "false" # turn off caching for the linting phase only
+      - name: Output Information
+        run: echo "Cache used? ${{ steps.cache-deps.outputs.used-cache }}"
+      - name: Lint codebase
+        run: npm run lint
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Load & Cache Dependencies
+        uses: ./.github/actions/cache-deps # just add folder containing action.yml
+      - name: Test project
+        id: run-tests
+        run: npm run test
+      - name: Upload test report
+        # failure() here is a 'special condition' that is required to let the job continue on failure
+        if: failure() && steps.run-tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: test.json
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Load & Cache Dependencies
+        uses: ./.github/actions/cache-deps # just add folder containing action.yml
+      - name: Build project
+        run: npm run build
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-files
+          path: ./dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Get build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-files
+          path: ./dist
+      - name: Deploy site
+        id: deploy
+        uses: ./.github/actions/deploy-s3-javascript
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        with:
+          bucket: gha-test-bkt-2736283
+          dist-folder: ./dist
+      - name: Output site URL
+        run: |
+          echo "Live URL ${{ steps.deploy.outputs.site-url }}"
+  report:
+    # run this job after the others have completed - ommitting this will run reports in parallel
+    needs: [lint, test, build, deploy]
+    # failure() condition states this job will run if any other job fails
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Output error report
+        run: |
+          echo "Generating error report..."
+          echo "Saving error report..."

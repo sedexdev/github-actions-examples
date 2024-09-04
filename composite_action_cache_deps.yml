@@ -1,0 +1,31 @@
+# composite action
+---
+name: Get & Cache Dependencies
+description: "Get the project dependencies and cache them"
+inputs:
+  caching:
+    description: "Whether to cache dependencies or not"
+    required: false
+    default: "true"
+outputs:
+  used-cache:
+    description: "Whether the cache was used"
+    value: ${{ steps.install.outputs.cache }}
+runs:
+  using: "composite"
+  steps:
+    - name: Cache dependencies
+      if: inputs.caching == 'true'
+      id: cache # giving an id allows us to reference this step later
+      uses: actions/cache@v4
+      with:
+        path: node_modules # node_modules contains the project binaries
+        key: deps-node-modules-${{ hashFiles('**/package-lock.json') }}
+    - name: Install dependencies
+      id: install
+      # now we can check for a cache hit to save time installing dependencies if the cache was used
+      if: steps.cache.outputs.cache-hit != 'true' || inputs.caching != 'true'
+      run: |
+        npm ci
+        echo "cache=${{ inputs.caching }}" >> $GITHUB_OUTPUT
+      shell: bash # required when using the 'run' command in a composite action

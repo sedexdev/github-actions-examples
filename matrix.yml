@@ -1,0 +1,35 @@
+---
+name: Matrix Demo
+on: push
+permissions: read-all
+jobs:
+  build:
+    # continue on error allows jobs to still run even if one fails
+    continue-on-error: true
+    # a matrix is an array of values to run the workflow with
+    # this creates separate jobs for each combination of values
+    # e.g this workflow creates 6 jobs to cover multiple OSs and Node versions
+    strategy:
+      matrix:
+        node-version: [12, 18, 21]
+        operating-system: [ubuntu-latest, windows-latest] # workflow runs on 2 runners, installing 3 versions of NodeJS on each
+        # this include setting allows you add additional key/values for configs you may want to keep outside the matrix
+        include:
+          - node-version: 14
+            operating-system: ubuntu-latest # in this scenario we only want to test NodeJS v14 on Ubuntu, not Windows
+        # this exclude setting stops a configuration from running
+        exclude:
+          - node-version: 12
+            operating-system: windows-latest # in this scenario we don't test NodeJS v12 on Windows, only Ubuntu
+    runs-on: ${{ matrix.operating-system }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Install NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install dependencies
+        run: npm ci
+      - name: Build project
+        run: npm run build

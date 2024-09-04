@@ -1,0 +1,38 @@
+---
+name: Reusable Workflow Demo
+on:
+  # opposite to manual process of workflow_dispatch
+  workflow_call:
+    # inputs are like function arguments, each having a set of available options
+    inputs:
+      artifact-name:
+        description: The name of the deployable artifact
+        required: false
+        default: dist
+        type: string
+    outputs:
+      result:
+        description: The result of the deployment operation
+        value: ${{ jobs.deploy.outputs.outcome }}
+    # adding secrets to a reusable workflow
+    # secrets:
+    #   some-secret:
+    #     required: true
+permissions: read-all
+jobs:
+  deploy:
+    outputs:
+      outcome: ${{ steps.set-deploy-result.outputs.deploy-result }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get deployable artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name }} # dynamically fetch the artifacts by name
+      - name: List files
+        run: ls -la
+      - name: Deploy stuff
+        run: echo "Deploying stuff!"
+      - name: Set result output
+        id: set-deploy-result
+        run: echo "deploy-result=success" >> $GITHUB_OUTPUT

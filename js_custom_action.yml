@@ -1,0 +1,30 @@
+# Custom JavaScript Action
+---
+name: "Deploy to AWS S3"
+description: "Deploy a static website to AWS S3"
+inputs:
+  bucket:
+    description: "S3 bucket name"
+    required: true
+  bucket-region:
+    description: "Region hosting the S3 bucket"
+    required: false
+    default: "us-east-1"
+  dist-folder:
+    description: "Static site distribution files"
+    required: true
+runs:
+  using: node20 # this tells GA we are using the NodeJS runtime
+  # pre: script to execute before main
+  main: "main.js"
+  # post: script to execute after main
+
+# Docker version
+
+# runs:
+#   using: 'docker'
+#   image: 'Dockerfile' path to Dockerfile
+
+outputs:
+  site-url:
+    description: "The URL of the deployed website"

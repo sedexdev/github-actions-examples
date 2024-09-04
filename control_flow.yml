@@ -1,0 +1,93 @@
+---
+name: Deployment Workflow
+on: push
+permissions: read-all
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Cache dependencies
+        id: cache # giving an id allows us to reference this step later
+        uses: actions/cache@v4
+        with:
+          path: node_modules # node_modules contains the project binaries
+          key: deps-node-modules-${{ hashFiles('**/package-lock.json') }}
+      - name: Install dependencies
+        # now we can check for a cache hit to save time installing dependencies if the cache was used
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: npm ci
+      - name: Lint codebase
+        run: npm run lint
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Cache dependencies
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: deps-node-modules-${{ hashFiles('**/package-lock.json') }}
+      - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: npm ci
+      - name: Test project
+        id: run-tests
+        run: npm run test
+      - name: Upload test report
+        # failure() here is a 'special condition' that is required to let the job continue on failure
+        if: failure() && steps.run-tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: test.json
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Cache dependencies
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: deps-node-modules-${{ hashFiles('**/package-lock.json') }}
+      - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: npm ci
+      - name: Deploy project
+        run: npm run build
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-files
+          path: dist
+  deploy:
+    needs: build
+    uses: ./.github/workflows/reusable.yml # path relative to project root
+    with:
+      artifact-name: dist-files # pas in dist-files to the reusable artifact
+    # using secrets in a reusable workflow
+    # secrets:
+    #   some-secret: ${{ secrets.some-secret }}
+  view-deploy-result:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print deployment output
+        run: echo "${{ needs.deploy.outputs.result }}"
+  report:
+    # run this job after the others have completed - ommitting this will run reports in parallel
+    needs: [lint, test, build, deploy]
+    # failure() condition states this job will run if any other job fails
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Output error report
+        run: |
+          echo "Generating error report..."
+          echo "Saving error report..."

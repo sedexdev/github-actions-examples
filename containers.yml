@@ -1,0 +1,56 @@
+---
+name: Deployment (Containers)
+on:
+  push:
+    branches:
+      - main
+      - dev
+permissions: read-all
+env:
+  CACHE_KEY: node-deps
+  MONGODB_DB_NAME: gha-demo
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # running a container in a workflow
+    container:
+      image: node:18
+      # env:
+    env:
+      MONGODB_CONNECTION_PROTOCOL: mongodb
+      # since this 'test' job is running in a container already we can point the cluster address to the name of the service container below
+      # with this config all tests run in a testing container, against a test DB that will be destroyed
+      MONGODB_CLUSTER_ADDRESS: mongodb # matches service name below - GHA can configure Docker networking when job already runs in a container
+      #MONGODB_CLUSTER_ADDRESS: 127.0.0.1:27017 - if not running job in a container
+      MONGODB_USERNAME: root
+      MONGODB_PASSWORD: pw12
+      PORT: 8080
+    # service containers are used to run services in your workflow
+    services:
+      mongodb:
+        image: mongo
+        # ports:
+        # - 27017:27017 - if not running job in a container
+        env:
+          MONGO_INITDB_ROOT_USERNAME: root # these credentials can be exposed as the container lives as long os the workflow runner
+          MONGO_INITDB_ROOT_PASSWORD: pw12 # do not use production credentials here !!
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ env.CACHE_KEY }}-${{ hashFiles('package-lock.json') }}
+      - name: Install dependencies
+        run: npm ci
+      - name: Run server
+        run: npm start & npx wait-on http://127.0.0.1:$PORT
+      - name: Run tests
+        run: npm run test
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy project
+        run: echo "Deploying project :)"

@@ -1,0 +1,12 @@
+---
+name: Issue status
+on:
+  issues:
+    types: opened
+permissions: read-all
+jobs:
+  new-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Output metadata
+        run: echo "${{ toJson(github.event) }}"
